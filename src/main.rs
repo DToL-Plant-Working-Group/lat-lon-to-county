@@ -17,8 +17,15 @@ fn lat_long_to_url(lat: f32, lon: f32) -> String {
     formatted
 }
 
+// get is fallible. Wrap in again::retry
+
 async fn request_url(url: &str) -> String {
-    let body = reqwest::get(url).await.unwrap().text().await.unwrap();
+    let body = again::retry(|| reqwest::get(url))
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
     body
 }
 
