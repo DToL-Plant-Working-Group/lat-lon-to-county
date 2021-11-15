@@ -1,26 +1,28 @@
-// Query the https://www.geodojo.net/uk/grid/info/ API
-// return
-
-use std::ops::Deref;
-
 use clap::{value_t, App, Arg};
-use quick_xml::events::{BytesText, Event};
-use quick_xml::Reader;
 use reqwest;
+use serde_json::Value;
+use std::error::Error;
 use tokio;
 
-fn lat_long_to_url(lat: f32, lon: f32) -> String {
-    let formatted = format!(
-        "https://www.geodojo.net/uk/grid/?location={}+{}&dataset=vice_county&encoding=xml",
+// make a small request JSON
+fn format_post_request(lat: f32, lon: f32) -> String {
+    let request = format!(
+        "{{\"op\":\"convert\",\"locations\":[\"{} {}\"],\"types\":[\"vice-county\"]}}",
         lat, lon
     );
-    formatted
+    request
 }
 
 // get is fallible. Wrap in again::retry
 
-async fn request_url(url: &str) -> String {
-    let body = again::retry(|| reqwest::get(url))
+async fn request_url(url: &str, lat: f32, lon: f32) -> String {
+    let post = format_post_request(lat, lon);
+    let client = reqwest::Client::new();
+
+    let body = client
+        .post(url)
+        .body(post)
+        .send()
         .await
         .unwrap()
         .text()
@@ -30,7 +32,7 @@ async fn request_url(url: &str) -> String {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn Error>> {
     let matches = App::new("geodojo_county")
         .version(clap::crate_version!())
         .author("Max Brown <mb39@sanger.ac.uk>")
@@ -55,37 +57,22 @@ async fn main() {
     let lat = value_t!(matches.value_of("lat"), f32).unwrap_or_else(|e| e.exit());
     let lon = value_t!(matches.value_of("lon"), f32).unwrap_or_else(|e| e.exit());
 
-    let url = lat_long_to_url(lat, lon);
+    let response = request_url("https://geodojo.net/convert/api/", lat, lon).await;
+    let v: Value = serde_json::from_str(&response)?;
 
-    // this is an xml
-    let body = request_url(&url).await;
-
-    // parse the xml
-    let mut reader = Reader::from_str(&body);
-    reader.trim_text(true);
-
-    let mut buf = Vec::new();
-    let mut vcname: Option<String> = None;
-
-    loop {
-        match reader.read_event(&mut buf) {
-            Ok(Event::Start(ref e)) => match e.name() {
-                _name => vcname = Some(String::from_utf8(e.name().to_vec()).unwrap()),
-            },
-            Ok(Event::Text(e)) => match vcname {
-                Some(ref s) => {
-                    if s == "vcname" {
-                        let escaped_string = BytesText::unescaped(&e).unwrap();
-                        let string = std::str::from_utf8(escaped_string.deref()).unwrap();
-                        println!("{}", string)
-                    }
-                }
-                None => (),
-            },
-            Err(e) => panic!("Error at position {}: {:?}", reader.buffer_position(), e),
-            Ok(Event::Eof) => break,
-            _ => (),
+    let county_op = v[0]["locations"][0]["location"].as_str();
+    let county = match county_op {
+        Some(s) => {
+            let pos = s.chars().position(|x| x == ' ');
+            match pos {
+                Some(p) => &s[p + 1..],
+                None => "",
+            }
         }
-        buf.clear();
-    }
+        None => "",
+    };
+
+    println!("{}", county);
+
+    Ok(())
 }
