@@ -17,23 +17,18 @@ Executable in `./target/release/geodojo_county`.
 ## Usage
 
 ```
-geodojo_county 0.1.0
+geodojo_county 0.1.1
 Max Brown <mb39@sanger.ac.uk>
 Get UK counties from lat-long data.
 
 USAGE:
-    geodojo_county --lat <lat> --lon <lon>
+    geodojo_county --file <file>
 
 FLAGS:
     -h, --help       Prints help information
     -V, --version    Prints version information
 
 OPTIONS:
-        --lat <lat>    The input latitude.
-        --lon <lon>    The input longitude.
+    -f, --file <file>    The input file containing lat long whitespace separated lines.
 ```
-
-Or simply:
-
-`geodojo_county --lat 55.9459201493332 --lon -2.72697188954985`
 
